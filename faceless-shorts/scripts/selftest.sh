@@ -6,6 +6,11 @@
 set -u
 SKILL="$(cd "$(dirname "$0")/.." && pwd)"; PY="$SKILL/scripts/py"
 FH="${FACELESS_HOME:-$HOME/.faceless-shorts}"; export PATH="$FH/tools/bin:$PATH"
+# Portable Chromium has no hardware GPU. Keep the smoke test quick without
+# changing normal project renders; users can still choose full-quality settings.
+if [ -x "$FH/tools/bin/faceless-chrome" ] && { [ -z "${CHROME:-}" ] || [ "$CHROME" = "$FH/tools/bin/faceless-chrome" ]; }; then
+  export SOFTWARE_GL="${SOFTWARE_GL:-1}" FPS="${FPS:-24}" QS="${QS:-&res=0.6&aa=0&shadow=512}"
+fi
 T="$HOME/faceless-shorts/_selftest"; rm -rf "$T"; mkdir -p "$T"; LOG="$T/selftest.log"; : > "$LOG"
 VOICE=1; [ "${1:-}" = "--no-voice" ] && VOICE=0
 fail=0; note() { printf '%-22s %s\n' "$1" "$2"; }

@@ -1,8 +1,8 @@
-"""Narration for $0 on this computer: Kokoro-82M text-to-speech (Apache-2.0) via kokoro-onnx. No account, no API.
+"""Narration for $0 on this computer: Kokoro-82M when its model is available, otherwise a local CC0 Piper voice. No account, no API.
 
   scripts/py scripts/voice.py <project>          script.json -> data/narration.wav + data/lines.json (exact line times)
   scripts/py scripts/voice.py --list             voices that narrate well
-  scripts/py scripts/voice.py --download         only fetch the model files (~340 MB, once)
+  scripts/py scripts/voice.py --download         verify installed local voice files
 
 script.json: { "voice": "am_michael", "speed": 1.05, "lead": 0.45, "outro": 0.9, "gap": 0.32,
                "lines": [ { "text": "What if you swallow gum?", "caps": "...", "gap": 0.3 }, ... ] }
@@ -15,10 +15,12 @@ Write numbers the way they're SAID. Then run words.py for the word timings.
 import argparse, json, os, re, sys, urllib.request
 from pathlib import Path
 import numpy as np
+from scipy import signal
 from scipy.io import wavfile
 
 HOME = Path(os.environ.get('FACELESS_HOME', Path.home() / '.faceless-shorts'))
 KDIR = HOME / 'kokoro'
+PIPER_MODEL = HOME / 'models' / 'piper' / 'en_US-joe-medium.onnx'
 FILES = {
     'kokoro-v1.0.onnx': 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx',
     'voices-v1.0.bin': 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/voices-v1.0.bin',
@@ -32,13 +34,25 @@ GOOD = {
 SR = 24000
 
 
+def kokoro_ready():
+    return all((KDIR / name).exists() and (KDIR / name).stat().st_size > 1_000_000 for name in FILES)
+
+
+def piper_ready():
+    return PIPER_MODEL.exists() and PIPER_MODEL.with_suffix('.onnx.json').exists()
+
+
 def ensure_models():
+    """Prefer the original Kokoro runtime, with Piper as an offline fallback."""
+    if kokoro_ready(): return 'kokoro'
+    if piper_ready(): return 'piper'
     KDIR.mkdir(parents=True, exist_ok=True)
     for name, url in FILES.items():
         p = KDIR / name
         if p.exists() and p.stat().st_size > 1_000_000: continue
         print(f'downloading {name} (once)...', flush=True)
         tmp = p.with_suffix('.part'); urllib.request.urlretrieve(url, tmp); tmp.rename(p)
+    return 'kokoro'
 
 
 def trim(x, thr=0.008):
@@ -61,6 +75,23 @@ def silences(x, thr=0.012, min_len=0.06):
     return out
 
 
+def make_piper_say(speed):
+    """Return a Kokoro-compatible 24 kHz synthesis function using the CC0 Piper voice."""
+    from piper import PiperVoice
+    from piper.config import SynthesisConfig
+    voice = PiperVoice.load(PIPER_MODEL)
+    config = SynthesisConfig(length_scale=1 / max(speed, 0.1))
+
+    def say(text):
+        chunks = [chunk.audio_float_array for chunk in voice.synthesize(text, config)]
+        x = np.concatenate(chunks) if chunks else np.zeros(1, dtype=np.float32)
+        if voice.config.sample_rate != SR:
+            x = signal.resample_poly(x, SR, voice.config.sample_rate)
+        return trim(np.asarray(x, dtype=np.float64))
+
+    return say
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('project', nargs='?'); ap.add_argument('--list', action='store_true'); ap.add_argument('--download', action='store_true')
@@ -69,15 +100,23 @@ def main():
     if a.list:
         for k, v in GOOD.items(): print(f'{k:12s} {v}')
         return
-    ensure_models()
-    if a.download: return
+    engine = ensure_models()
+    if a.download:
+        print(f'{engine} voice model ready')
+        return
     if not a.project: ap.error('project folder missing')
-    from kokoro_onnx import Kokoro
     P = Path(a.project); S = json.loads((P / 'script.json').read_text())
     voice = a.voice or S.get('voice', 'am_michael'); speed = a.speed or S.get('speed', 1.0)
-    k = Kokoro(str(KDIR / 'kokoro-v1.0.onnx'), str(KDIR / 'voices-v1.0.bin'))
-    lang = 'en-gb' if voice.startswith('b') else 'en-us'
-    say = lambda text: trim(np.asarray(k.create(text, voice=voice, speed=speed, lang=lang)[0], dtype=np.float64))
+    if engine == 'kokoro':
+        from kokoro_onnx import Kokoro
+        k = Kokoro(str(KDIR / 'kokoro-v1.0.onnx'), str(KDIR / 'voices-v1.0.bin'))
+        lang = 'en-gb' if voice.startswith('b') else 'en-us'
+        say = lambda text: trim(np.asarray(k.create(text, voice=voice, speed=speed, lang=lang)[0], dtype=np.float64))
+        voice_used = voice
+    else:
+        print(f'Kokoro model unavailable; using the free local Piper Joe voice instead of {voice}.', flush=True)
+        say = make_piper_say(speed)
+        voice_used = 'piper-joe'
     # group the lines into whole sentences (a line ending in . ? ! closes one; "break": true forces a close)
     groups, cur = [], []
     for i, ln in enumerate(S['lines']):
@@ -106,8 +145,8 @@ def main():
     (P / 'data').mkdir(exist_ok=True)
     wavfile.write(P / 'data/narration.wav', SR, (y * 32767).astype(np.int16))
     dur = len(y) / SR
-    (P / 'data/lines.json').write_text(json.dumps({'duration': round(dur, 3), 'voice': voice, 'speed': speed, 'lines': lines}, indent=1))
-    print(f'data/narration.wav ({dur:.2f} s, {voice} x{speed}) + data/lines.json. Next: words.py')
+    (P / 'data/lines.json').write_text(json.dumps({'duration': round(dur, 3), 'voice': voice_used, 'speed': speed, 'lines': lines}, indent=1))
+    print(f'data/narration.wav ({dur:.2f} s, {voice_used} x{speed}) + data/lines.json. Next: words.py')
 
 
 if __name__ == '__main__':
