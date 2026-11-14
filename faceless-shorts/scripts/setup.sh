@@ -1,5 +1,5 @@
 #!/bin/bash
-# One-time setup. Safe to re-run. Prints "All set" when everything works (~0.9 GB of downloads, all free).
+# One-time setup. Safe to re-run. Prints "All set" when everything works (~350 MB of models, all free).
 # Checks Node.js 22+, ffmpeg, Chrome; builds ~/.faceless-shorts/venv; downloads free Piper and Whisper models.
 # On Linux, missing ffmpeg/Chrome can be installed without sudo through install-runtime-tools.sh.
 set -u
@@ -41,13 +41,14 @@ if [ ! -x "$VENV/bin/python" ] && [ ! -x "$VENV/Scripts/python.exe" ]; then
   elif [ -n "$PYBIN" ]; then $PYBIN -m venv "$VENV"; fi
 fi
 PY="$VENV/bin/python"; [ -x "$PY" ] || PY="$VENV/Scripts/python.exe"
-CHECK="import numpy, scipy, kokoro_onnx, faster_whisper"
+CHECK="import numpy, scipy, kokoro_onnx, faster_whisper, piper"
+PIP="numpy scipy kokoro-onnx faster-whisper piper-tts"
 if [ -x "$PY" ]; then
   if ! "$PY" -c "$CHECK" 2>/dev/null; then
-    if command -v uv >/dev/null; then uv pip install --python "$PY" -q numpy scipy kokoro-onnx faster-whisper >/dev/null 2>&1
-    else "$PY" -m pip install -q --upgrade pip >/dev/null 2>&1; "$PY" -m pip install -q numpy scipy kokoro-onnx faster-whisper >/dev/null 2>&1; fi
+    if command -v uv >/dev/null; then uv pip install --python "$PY" -q $PIP >/dev/null 2>&1
+    else "$PY" -m pip install -q --upgrade pip >/dev/null 2>&1; "$PY" -m pip install -q $PIP >/dev/null 2>&1; fi
   fi
-  if "$PY" -c "$CHECK" 2>/dev/null; then say python-env "ok ($VENV)"; else say python-env "BROKEN: run $PY -m pip install numpy scipy kokoro-onnx faster-whisper"; ok=0; fi
+  if "$PY" -c "$CHECK" 2>/dev/null; then say python-env "ok ($VENV)"; else say python-env "BROKEN: run $PY -m pip install $PIP"; ok=0; fi
   if PIPER_PYTHON="$PY" bash "$SKILL/scripts/install-voice-model.sh" >/dev/null 2>&1 && "$PY" "$SKILL/scripts/voice.py" --download >/dev/null 2>&1; then say voice "ok (free local Piper voice)"; else say voice "model download FAILED (check the internet connection, re-run)"; ok=0; fi
   WHISPER="$FH/models/whisper-small"
   if [ ! -f "$WHISPER/model.bin" ]; then bash "$SKILL/scripts/install-subtitle-model.sh" >/dev/null 2>&1 || true; fi
