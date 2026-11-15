@@ -12,13 +12,13 @@ word-synced captions, animation, sound effects and music, rendered to MP4. No AI
 6. **Tall Tale 3D**: funny true stories, flat 2D cartoon people in a sunny 3D world. Example: *The girl who was mailed to grandma*.
 
 **How it works**
-script.json → local neural voice (Kokoro when available, otherwise the bundled free Piper voice) → local Whisper word timings → shots drawn in code, each cut and caption
+script.json → local Kokoro-82M Q8 voice (with a free Piper fallback) → local Whisper word timings → shots drawn in code, each cut and caption
 placed on its word → procedural sound + music → headless Chrome captures every frame → ffmpeg renders the MP4.
 Claude checks a contact sheet of the whole video before you ever see it.
 Optional: when you ask, Claude uploads the finished short to your YouTube channel through Zapier (it confirms title, visibility and category first).
 
 **Needs:** Claude Code (or Claude with a linked computer), Node.js 22+, ffmpeg, Google Chrome, Python 3.10+, and roughly 350 MB
-for the free local Piper voice and Whisper subtitle models. `setup.sh` installs what is missing.
+for the free local Kokoro voice and Whisper subtitle models. `setup.sh` installs what is missing.
 
 **Windows:** run the scripts in Git Bash (installed with Git for Windows; Claude Code uses it already).
 
@@ -35,5 +35,5 @@ headless Chromium fallback when system packages are unavailable—no sudo requir
 (the dependency-free video gallery).
 
 **Licenses:** the code, stories, drawings and sound are original and free to use in your videos. Inter font: SIL Open Font
-License 1.1. Installed on first use: Piper en_US-joe-medium voice (CC0) with Piper TTS (MIT), faster-whisper + Whisper small
-(MIT), numpy and scipy. Kokoro-82M (Apache-2.0) remains supported whenever its original model files are available.
+License 1.1. Installed on first use: Kokoro-82M Q8 voice (Apache-2.0), faster-whisper + Whisper small
+(MIT), numpy and scipy. Piper en_US-joe-medium (CC0) with Piper TTS (MIT) remains available as an offline fallback.

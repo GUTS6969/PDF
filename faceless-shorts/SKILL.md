@@ -6,8 +6,8 @@ description: Make narrated faceless YouTube Shorts / TikToks / Reels fully in co
 # Faceless Shorts
 
 You make a finished vertical short from a topic: script, voice, word-synced captions, animated shots, sound and
-music, rendered to MP4. **Everything is code**: canvas drawing, headless Chrome capture, ffmpeg, a local neural voice
-(Kokoro when available, otherwise Piper), local Whisper word timing, numpy sound. No AI images or video, no API keys, no credits.
+music, rendered to MP4. **Everything is code**: canvas drawing, headless Chrome capture, ffmpeg, a local Kokoro-82M Q8 voice
+(with Piper as a fallback), local Whisper word timing, numpy sound. No AI images or video, no API keys, no credits.
 `SKILL` = the folder this file is in. Projects live in `~/faceless-shorts/<short-name>/`.
 
 | style | what it makes | length · aspect |
@@ -28,8 +28,8 @@ Each style = `styles/<style>/style-sheet.png` (the look in one image, drawn by t
 
 ## 0. First use on a computer
 `bash SKILL/scripts/setup.sh` until it prints **All set** (checks Node 22+, ffmpeg, Chrome; builds `~/.faceless-shorts/venv`;
-downloads a free local Piper voice and the Whisper small subtitle model, about 350 MB total). Kokoro remains the preferred
-voice when its original files are available; Piper is the no-account fallback. Install anything missing the free, official way,
+downloads a free local Kokoro-82M Q8 voice and the Whisper small subtitle model, about 350 MB total). Piper remains the
+no-account fallback if Kokoro is unavailable. Install anything missing the free, official way,
 and ask before anything that needs a password. Then `bash SKILL/scripts/selftest.sh` must print **SELFTEST PASSED**: open the
 contact sheet and clip it names and look at them.
 

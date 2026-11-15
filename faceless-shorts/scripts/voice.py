@@ -1,4 +1,4 @@
-"""Narration for $0 on this computer: Kokoro-82M when its model is available, otherwise a local CC0 Piper voice. No account, no API.
+"""Narration for $0 on this computer: local Kokoro-82M Q8, with a CC0 Piper fallback. No account, no API.
 
   scripts/py scripts/voice.py <project>          script.json -> data/narration.wav + data/lines.json (exact line times)
   scripts/py scripts/voice.py --list             voices that narrate well
@@ -20,6 +20,11 @@ from scipy.io import wavfile
 
 HOME = Path(os.environ.get('FACELESS_HOME', Path.home() / '.faceless-shorts'))
 KDIR = HOME / 'kokoro'
+# Compact Kokoro-82M Q8 model and its locally packed English voice styles.
+# It is fully local, loaded through the existing kokoro-onnx CPU runtime.
+KQ8_DIR = HOME / 'models' / 'kokoro-82m-q8'
+KQ8_MODEL = KQ8_DIR / 'onnx' / 'model_quantized.onnx'
+KQ8_VOICES = KQ8_DIR / 'voices.npz'
 PIPER_MODEL = HOME / 'models' / 'piper' / 'en_US-joe-medium.onnx'
 FILES = {
     'kokoro-v1.0.onnx': 'https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0/kokoro-v1.0.onnx',
@@ -34,6 +39,10 @@ GOOD = {
 SR = 24000
 
 
+def kokoro_q8_ready():
+    return KQ8_MODEL.exists() and KQ8_MODEL.stat().st_size > 90_000_000 and KQ8_VOICES.exists()
+
+
 def kokoro_ready():
     return all((KDIR / name).exists() and (KDIR / name).stat().st_size > 1_000_000 for name in FILES)
 
@@ -43,7 +52,8 @@ def piper_ready():
 
 
 def ensure_models():
-    """Prefer the original Kokoro runtime, with Piper as an offline fallback."""
+    """Prefer local Kokoro-82M Q8, then original Kokoro, with Piper as fallback."""
+    if kokoro_q8_ready(): return 'kokoro-q8'
     if kokoro_ready(): return 'kokoro'
     if piper_ready(): return 'piper'
     KDIR.mkdir(parents=True, exist_ok=True)
@@ -73,6 +83,27 @@ def silences(x, thr=0.012, min_len=0.06):
             if (f - st) * 0.01 >= min_len: out.append((st * 0.01, f * 0.01))
             st = None
     return out
+
+
+def make_kokoro_q8_say(voice_name, speed):
+    """Run the local Q8 Kokoro ONNX export with its packaged 28 English voices."""
+    from kokoro_onnx import Kokoro
+    k = Kokoro(str(KQ8_MODEL), str(KQ8_VOICES))
+
+    # The compact Transformers.js ONNX export expects style as [1, 256].
+    # kokoro-onnx's older v1 export uses [256], so adapt only this model's
+    # inference input while preserving its tokenizer and natural pause logic.
+    def q8_infer(tokens, style, rate):
+        inputs = {
+            k._tokens_input: np.array([[0, *tokens, 0]], dtype=k._input_dtypes[k._tokens_input]),
+            'style': np.asarray(style, dtype=k._input_dtypes['style']).reshape(1, -1),
+            'speed': np.array([k._speed_value(rate)], dtype=k._input_dtypes['speed']),
+        }
+        return np.asarray(k.sess.run(None, inputs)[0]).ravel(), None
+
+    k._infer = q8_infer
+    lang = 'en-gb' if voice_name.startswith('b') else 'en-us'
+    return lambda text: trim(np.asarray(k.create(text, voice=voice_name, speed=speed, lang=lang)[0], dtype=np.float64))
 
 
 def make_piper_say(speed):
@@ -107,7 +138,11 @@ def main():
     if not a.project: ap.error('project folder missing')
     P = Path(a.project); S = json.loads((P / 'script.json').read_text())
     voice = a.voice or S.get('voice', 'am_michael'); speed = a.speed or S.get('speed', 1.0)
-    if engine == 'kokoro':
+    if engine == 'kokoro-q8':
+        print(f'Using local Kokoro-82M Q8 voice: {voice}.', flush=True)
+        say = make_kokoro_q8_say(voice, speed)
+        voice_used = voice
+    elif engine == 'kokoro':
         from kokoro_onnx import Kokoro
         k = Kokoro(str(KDIR / 'kokoro-v1.0.onnx'), str(KDIR / 'voices-v1.0.bin'))
         lang = 'en-gb' if voice.startswith('b') else 'en-us'

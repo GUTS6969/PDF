@@ -1,6 +1,6 @@
 #!/bin/bash
 # One-time setup. Safe to re-run. Prints "All set" when everything works (~350 MB of models, all free).
-# Checks Node.js 22+, ffmpeg, Chrome; builds ~/.faceless-shorts/venv; downloads free Piper and Whisper models.
+# Checks Node.js 22+, ffmpeg, Chrome; builds ~/.faceless-shorts/venv; downloads free Kokoro and Whisper models.
 # On Linux, missing ffmpeg/Chrome can be installed without sudo through install-runtime-tools.sh.
 set -u
 ok=1; say() { printf '%-12s %s\n' "$1" "$2"; }
@@ -49,7 +49,7 @@ if [ -x "$PY" ]; then
     else "$PY" -m pip install -q --upgrade pip >/dev/null 2>&1; "$PY" -m pip install -q $PIP >/dev/null 2>&1; fi
   fi
   if "$PY" -c "$CHECK" 2>/dev/null; then say python-env "ok ($VENV)"; else say python-env "BROKEN: run $PY -m pip install $PIP"; ok=0; fi
-  if PIPER_PYTHON="$PY" bash "$SKILL/scripts/install-voice-model.sh" >/dev/null 2>&1 && "$PY" "$SKILL/scripts/voice.py" --download >/dev/null 2>&1; then say voice "ok (free local Piper voice)"; else say voice "model download FAILED (check the internet connection, re-run)"; ok=0; fi
+  if KOKORO_PYTHON="$PY" bash "$SKILL/scripts/install-kokoro-model.sh" >/dev/null 2>&1 && "$PY" "$SKILL/scripts/voice.py" --download >/dev/null 2>&1; then say voice "ok (local Kokoro-82M Q8)"; else say voice "model download FAILED (check the internet connection, re-run)"; ok=0; fi
   WHISPER="$FH/models/whisper-small"
   if [ ! -f "$WHISPER/model.bin" ]; then bash "$SKILL/scripts/install-subtitle-model.sh" >/dev/null 2>&1 || true; fi
   if FACELESS_WHISPER_MODEL="$WHISPER" "$PY" -c "import os; from faster_whisper import WhisperModel; WhisperModel(os.environ['FACELESS_WHISPER_MODEL'], device='cpu', compute_type='int8')" >/dev/null 2>&1; then say whisper "ok (small, $WHISPER)"; else say whisper "model download FAILED (re-run setup.sh)"; ok=0; fi
